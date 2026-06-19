@@ -177,6 +177,10 @@ class ConcentratedLiquidityAMM:
 | 穩定幣特化 | Curve | StableSwap | 穩定幣/同質資產 |
 | 多資產池 | Balancer | x₁^w₁·x₂^w₂...=k | 指數型投資組合 |
 
+> **🔄 技術更新（2025+）**：
+> - **Uniswap V4（2024年底）**：引入「Hooks」機制，允許開發者在流動性操作的各階段（swap 前後、LP 存取前後）插入自定義邏輯，可實現動態費率、鏈上限價單、MEV 保護等功能；同時採用 Singleton 合約架構（所有池共用一個合約），大幅降低 Gas。
+> - **Intent-based 交換（UniswapX、CoW Protocol）**：用戶簽署「意圖」（我想用 X 換至少 Y 個 Z），由求解者（Solver）競爭最優路徑，解決 MEV 搶跑和滑點問題，成為新一代交換架構主流。
+
 ---
 
 ## 8.2 流動性與 Impermanent Loss
@@ -396,3 +400,9 @@ class OracleManipulationDefense:
 | Uniswap TWAP | 鏈上 AMM | 最高 | 即時 | 中（可操控） |
 | Band Protocol | 去中心化 | 高 | 按需 | 高 |
 | Pyth Network | 機構數據 | 中 | 亞秒級 | 中-高 |
+
+> **🔄 技術更新（2025+）**：
+> - **Pyth Network 崛起**：Pyth 的 Pull Oracle 模式（由 dApp 在需要時主動拉取並推送價格，而非主動推送到所有鏈）已成為 Solana 和多鏈 DeFi 主流，延遲達毫秒級，已整合超過 90 條鏈。
+> - **EigenLayer AVS Oracle**：透過再質押（Restaking）為 Oracle 提供經濟安全性，驗證者的 ETH 質押也保護 Oracle 的誠實性，是下一代去信任 Oracle 架構。
+> - **MEV（最大可提取價值）**：2024-2025 年 MEV 機器人（三明治攻擊、套利）從 Ethereum 主網提取超 10 億美元。Flashbots SUAVE（Single Unifying Auction for Value Expression）嘗試將 MEV 機制標準化並對用戶友好，是 DeFi 基礎設施的重要議題。
+> - **EigenLayer / 再質押（Restaking）**：允許 ETH 質押者將相同 ETH 同時為多個「主動驗證服務（AVS）」提供安全保障，LRTs（Liquid Restaking Tokens，如 ezETH、rsETH）衍生出新型 DeFi 生態，到 2025 年 TVL 超 100 億美元。

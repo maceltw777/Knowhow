@@ -297,6 +297,8 @@ ZK-Rollup 使用零知識證明（通常是 zk-SNARKs 或 zk-STARKs）來驗證 
 | 計算開銷 | 低（L2 側） | 高（証明生成） |
 | EVM 相容性 | 完全（Arbitrum/Optimism） | 有限（zkEVM 仍在完善）|
 
+> **🔄 技術更新（2025+）**：zkEVM 成熟度已大幅提升，Vitalik 定義了 4 種類型：Type 1（完全等效 EVM，如 Taiko）、Type 2（幾乎等效，如 Scroll、Polygon zkEVM）、Type 3/4（高效能但相容性有取捨，如 zkSync Era、StarkNet）。到 2025 年，主流 zkEVM 均已達 Type 2 以上，EVM 相容性問題基本解決。
+
 #### ZKRollupCircuit 電路設計
 
 ```python
@@ -741,3 +743,10 @@ class CrossShardManager:
   → 全網 ~16 MB/block 數據可用性
   → 配合 KZG 承諾 + 數據可用性採樣 (DAS)
 ```
+
+> **🔄 技術更新（2025+）**：
+> - **EIP-4844（Dencun 升級，2024年3月）**：已正式上線，blob 費用市場獨立於 Gas，Rollup 交易成本降低 90%+，Arbitrum/Optimism 用戶手續費大幅下降。
+> - **PeerDAS（EIP-7594）**：完整 Danksharding 的中間步驟，透過 P2P 節點採樣來提供數據可用性，預計 2025-2026 年上線。
+> - **Arbitrum Stylus（2024）**：允許以 Rust / C / C++ 編寫智能合約並編譯為 WASM，在 L2 執行時比 Solidity 快 10-100 倍，且互相可組合。
+> - **Based Rollup**：新型 Rollup 架構，由 L1 驗證者（proposer）直接排序 L2 交易，繼承 L1 的去中心化特性，代表項目為 Taiko。
+> - **主要 L2 生態（2025）**：Arbitrum One、OP Mainnet、Base（Coinbase）、zkSync Era、Starknet、Scroll、Linea、Blast、Mode 等已形成多元競爭格局，Base 日交易量已超過 Ethereum 主網。
