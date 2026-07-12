@@ -1,11 +1,119 @@
 # 章節6：網路擴展性與 Layer 2
 
 ## 目錄
+- [6.1 擴展性問題與方案總覽](#61-擴展性問題與方案總覽)
+  - [可擴展性三難困境](#可擴展性三難困境)
+  - [鏈上 vs 鏈下擴展分類](#鏈上-vs-鏈下擴展分類)
+  - [狀態通道](#狀態通道)
+  - [Plasma 與 Sidechain](#plasma-與-sidechain)
+  - [為何 Rollup 勝出](#為何-rollup-勝出)
 - [6.2 Rollups 架構](#62-rollups-架構)
   - [Optimistic Rollups 架構設計](#optimistic-rollups-架構設計)
   - [零知識證明 Rollups 技術](#零知識證明-rollups-技術)
 - [6.3 分片設計](#63-分片設計)
   - [分片技術與共識分離](#分片技術與共識分離)
+
+---
+
+## 6.1 擴展性問題與方案總覽
+
+區塊鏈的擴展性問題可以一句話概括：**每個全節點都要重新執行並儲存每一筆交易**，所以吞吐量受限於「單一節點」的能力，而非整個網路的總和。比特幣約 7 TPS、以太坊 L1 約 15–30 TPS，遠不及 Visa 的數萬 TPS。本節先建立擴展性的問題框架與各種解法的分類，後續 6.2、6.3 再深入 Rollup 與分片。
+
+### 可擴展性三難困境
+
+Vitalik 提出的「擴展性三難困境」（Scalability Trilemma）指出，區塊鏈難以同時最大化三個屬性，優化其中兩者往往犧牲第三者：
+
+```
+                去中心化 (Decentralization)
+                   任何人都能用消費級硬體
+                     跑節點驗證整條鏈
+                        /\
+                       /  \
+                      /    \
+                     /      \
+        安全性 ─────────────── 可擴展性
+   (Security)                  (Scalability)
+  攻擊成本高、抗           高吞吐、低手續費
+  51%/女巫攻擊
+
+  · 提高區塊大小/降出塊間隔 → 吞吐↑ 但節點門檻↑（犧牲去中心化）
+  · 減少驗證節點數          → 吞吐↑ 但攻擊成本↓（犧牲安全性）
+  · Rollup/分片的目標：靠密碼學與資料可用性「繞過」三難，而非硬選兩個
+```
+
+### 鏈上 vs 鏈下擴展分類
+
+| 類別 | 手段 | 代表 | 取捨 |
+|------|------|------|------|
+| **鏈上（L1）縱向** | 加大區塊、縮短出塊、平行執行 | Bitcoin 擴容之爭、Solana、Monad | 直接但推高節點門檻，傷害去中心化 |
+| **鏈上（L1）橫向** | 分片（Sharding），把狀態與交易切成多片 | 以太坊 Danksharding（見 6.3） | 複雜；跨片通訊與資料可用性是難點 |
+| **鏈下（L2）** | 把計算移到鏈下，只把「結果 + 證明/資料」放回 L1 | 狀態通道、Plasma、Rollup | 繼承 L1 安全，但各方案信任假設不同 |
+| **鏈旁（獨立鏈）** | 另起一條有自己共識的鏈，用橋接資產 | Sidechain（Polygon PoS）、跨鏈（見章節09） | 吞吐高但**不繼承** L1 安全 |
+
+關鍵區分：**L2（如 Rollup）繼承 L1 的安全性**——即使 L2 運營者作惡，用戶仍能靠 L1 上的資料與證明取回資產；而 **Sidechain 有自己的驗證者集合，安全性獨立於 L1**。
+
+### 狀態通道
+
+狀態通道（State Channel）是最早的 L2 思路：雙方（或多方）先在鏈上鎖定資產開通道，之後在鏈下互相簽署「狀態更新」，只在開通道與關通道時各上鏈一次。閃電網路（Lightning Network）是其在支付場景的代表（Payment Channel）。
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class ChannelState:
+    channel_id: str
+    balance_a: int          # A 方餘額
+    balance_b: int          # B 方餘額
+    nonce: int              # 版本號，越大越新
+    sig_a: bytes = b""
+    sig_b: bytes = b""
+
+class PaymentChannel:
+    """雙方鏈下互簽狀態，只在開/關通道時上鏈。"""
+
+    def __init__(self, a: str, b: str, deposit_a: int, deposit_b: int):
+        self.state = ChannelState("ch-1", deposit_a, deposit_b, nonce=0)
+
+    def pay(self, sender: str, amount: int) -> ChannelState:
+        s = self.state
+        if sender == "A":
+            assert s.balance_a >= amount
+            new = ChannelState(s.channel_id, s.balance_a - amount,
+                               s.balance_b + amount, s.nonce + 1)
+        else:
+            assert s.balance_b >= amount
+            new = ChannelState(s.channel_id, s.balance_a + amount,
+                               s.balance_b - amount, s.nonce + 1)
+        # 雙方離線簽署 new（此處省略簽章細節）
+        self.state = new
+        return new
+
+    def close(self, submitted: ChannelState, onchain_nonce: int):
+        """結算：鏈上只認 nonce 最大（最新）的已雙簽狀態。"""
+        if submitted.nonce <= onchain_nonce:
+            raise ValueError("提交了過期狀態（可能是欺詐），將被挑戰")
+        return submitted  # 依此分配鏈上鎖定的資產
+```
+
+**核心安全機制**：關閉通道有一段挑戰期，若某方提交舊狀態（例如對自己較有利的舊餘額），對方可提交 `nonce` 更大的最新狀態推翻它並沒收其保證金。閃電網路藉此加上 HTLC（雜湊時間鎖）串連多跳路由——HTLC 的細節見 [章節09 → 9.2 原子交換與 HTLC](章節09_跨鏈互操作性.md)。
+
+**限制**：僅適合「固定參與者、高頻互動」的場景（如支付），需鎖定資金、需保持在線監看欺詐，且無法讓通道外的第三方直接參與。這些限制正是後續 Plasma／Rollup 想突破的。
+
+### Plasma 與 Sidechain
+
+- **Plasma**：把交易移到一條「子鏈」，只週期性把子鏈狀態的 Merkle 根提交到 L1。用戶靠「退出遊戲」（exit game）與欺詐證明在子鏈作惡時退回 L1。**致命弱點是資料可用性**：若運營者發布狀態根卻扣住交易資料，用戶無法構造退出證明。Plasma 因此難以支援通用智能合約，逐漸被 Rollup 取代。
+- **Sidechain**：一條有**獨立共識**的區塊鏈（如 Polygon PoS），用雙向橋與 L1 互轉資產。吞吐高、相容 EVM，但安全性完全取決於自己的驗證者集合，**不繼承 L1 安全**。
+
+| 方案 | 資料放哪 | 安全繼承自 L1？ | 支援通用合約 | 主要弱點 |
+|------|---------|:---:|:---:|------|
+| 狀態通道 | 鏈下（雙方持有） | 是（挑戰期） | 否 | 需在線、固定參與者 |
+| Plasma | 鏈下（運營者） | 部分 | 受限 | 資料可用性問題 |
+| Sidechain | 側鏈自身 | **否** | 是 | 橋接風險、獨立安全 |
+| Rollup | **鏈上（L1 calldata/blob）** | **是** | 是 | 成本、排序者中心化 |
+
+### 為何 Rollup 勝出
+
+Rollup 的關鍵突破在於**把交易資料強制發布到 L1**（早期用 calldata，2024 年後用 blob，見 [章節14 EIP-4844](章節14_現代以太坊技術.md)），因此解決了 Plasma 的資料可用性難題：任何人都能從 L1 資料重建 L2 狀態並自證退出。計算搬到鏈下、資料留在鏈上，既繼承 L1 安全又大幅降低成本——這正是以太坊「Rollup-centric roadmap」把 Rollup 定為主要擴展路線的原因。至於「證明有效性」的兩條路線（樂觀假設 + 欺詐證明 vs 零知識有效性證明），即是下一節 6.2 的主題。
 
 ---
 
